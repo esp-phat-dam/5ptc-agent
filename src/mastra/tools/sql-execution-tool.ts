@@ -25,12 +25,17 @@ const executeQuery = async (client: Client, query: string) => {
 export const sqlExecutionTool = createTool({
   id: 'sql-execution',
   inputSchema: z.object({
-    connectionString: z.string().describe('PostgreSQL connection string'),
+    connectionString: z.string().optional().describe('PostgreSQL connection string. If not provided, will use NEWS_DATABASE_URL from environment variables.'),
     query: z.string().describe('SQL query to execute'),
   }),
-  description: 'Executes SQL queries against a PostgreSQL database',
+  description: 'Executes SQL queries against a PostgreSQL database. Uses NEWS_DATABASE_URL if connectionString is not provided.',
   execute: async ({ context: { connectionString, query } }) => {
-    const client = createDatabaseConnection(connectionString);
+    // Use NEWS_DATABASE_URL as fallback if connectionString is not provided
+    const dbUrl = connectionString || process.env.NEWS_DATABASE_URL;
+    if (!dbUrl) {
+      throw new Error('No connection string provided and NEWS_DATABASE_URL is not set in environment variables');
+    }
+    const client = createDatabaseConnection(dbUrl);
 
     try {
       console.log('🔌 Connecting to PostgreSQL for query execution...');
