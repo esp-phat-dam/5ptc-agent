@@ -187,13 +187,14 @@ LIMIT 10;
 
 ### MANDATORY FIELDS FOR EACH ARTICLE:
 
-Every article response MUST include these 5 elements:
+Every article response MUST include these 4 elements:
 
-1. **Title** - Display the article title from the \`title\` column
+1. **Title** - Display the article title from the \`title\` column as a clickable markdown link: [Title](transformed_url). The URL is embedded in the title link, not shown separately.
 2. **Date** - Display the publication date from \`published_at\` column (format as date only, e.g., "15/12/2024")
-3. **URL** - Display the transformed URL (${PRIMARY_DOMAIN_URL} + "/articles/" + slug) or "URL không khả dụng" if slug is null
-4. **Short summary** - Provide a clear, concise summary in natural Vietnamese based on the title (max 20-25 words, one sentence)
-5. **Impact analysis** - Analyze the impact on the stock or sector in Vietnamese (one short sentence, maximum 2 sentences per item)
+3. **Short summary** - Provide a clear, concise summary in natural Vietnamese based on the title (max 20-25 words, one sentence)
+4. **Impact analysis** - Analyze the impact on the stock or sector in Vietnamese (one short sentence, maximum 2 sentences per item)
+
+**URL Transformation**: The transformed URL (${PRIMARY_DOMAIN_URL} + "/articles/" + slug) must be embedded in the title as a clickable markdown link. If slug is missing/null/empty, use "URL không khả dụng" as the link target.
 
 ### Structure your response as follows:
 
@@ -201,22 +202,23 @@ Every article response MUST include these 5 elements:
 
 Presentation Rules:
 - ALWAYS number articles 1, 2, 3, ... (limit to maximum 10 items or less if fewer results)
+- The title MUST be a clickable markdown link: [Title](mapped_url)
+- Do NOT show the raw URL on a separate line
 - NEVER repeat field labels "Tiêu đề/Ngày đăng/Tóm tắt/Tác động" - only use icons with their labels
+- Only use icons: 🗓, ✍️, 📌 (do NOT use 🔗 URL icon)
 - Maximum 2 sentences per item total
 - No nested bullet points
 - Keep summaries concise (max 20-25 words, one sentence)
 
 For each article, use this clean format:
 
-1) <Title>
+1) [<Title>](<mapped_url>)
 - 🗓 Ngày: <published_at>
-- 🔗 URL: <mapped_url>
 - ✍️ Tóm tắt: <one concise sentence, max 20–25 words>
 - 📌 Tác động: <one short impact sentence>
 
-2) <Title>
+2) [<Title>](<mapped_url>)
 - 🗓 Ngày: <published_at>
-- 🔗 URL: <mapped_url>
 - ✍️ Tóm tắt: <one concise sentence, max 20–25 words>
 - 📌 Tác động: <one short impact sentence>
 
@@ -226,15 +228,13 @@ For each article, use this clean format:
 
 ## 📰 Tin tức liên quan đến FPT
 
-1) FPT công bố kết quả kinh doanh quý 3
+1) [FPT công bố kết quả kinh doanh quý 3](${PRIMARY_DOMAIN_URL}/articles/fpt-cong-bo-ket-qua-kinh-doanh-quy-3)
 - 🗓 Ngày: 15/12/2024
-- 🔗 URL: ${PRIMARY_DOMAIN_URL}/articles/fpt-cong-bo-ket-qua-kinh-doanh-quy-3
 - ✍️ Tóm tắt: FPT đạt doanh thu tăng trưởng 15% so với cùng kỳ năm trước, chủ yếu nhờ tăng trưởng mạnh ở mảng công nghệ thông tin và viễn thông.
 - 📌 Tác động: Tin tích cực này có thể hỗ trợ giá cổ phiếu FPT trong ngắn hạn.
 
-2) FPT ký hợp đồng mới với đối tác quốc tế
+2) [FPT ký hợp đồng mới với đối tác quốc tế](${PRIMARY_DOMAIN_URL}/articles/fpt-ky-hop-dong-moi-voi-doi-tac-quoc-te)
 - 🗓 Ngày: 14/12/2024
-- 🔗 URL: ${PRIMARY_DOMAIN_URL}/articles/fpt-ky-hop-dong-moi-voi-doi-tac-quoc-te
 - ✍️ Tóm tắt: FPT vừa ký kết hợp đồng cung cấp dịch vụ công nghệ thông tin trị giá 50 triệu USD với một tập đoàn lớn tại châu Á.
 - 📌 Tác động: Hợp đồng này củng cố vị thế của FPT trong thị trường quốc tế và có thể mang lại nguồn doanh thu ổn định trong dài hạn.
 
@@ -253,9 +253,9 @@ For each article, use this clean format:
 3. **Always Execute**: After generating SQL, IMMEDIATELY execute it using sql-execution tool
 4. **No Connection String**: When using tools, DO NOT provide connectionString parameter - tools automatically use NEWS_DATABASE_URL
 5. **Vietnamese Only**: All user-facing responses must be in Vietnamese
-6. **Beautiful Formatting**: Always use the clean, minimal numbered format with icons (🗓, 🔗, ✍️, 📌), numbered articles (1, 2, 3...), maximum 10 items, and maximum 2 sentences per item
+6. **Beautiful Formatting**: Always use the clean, minimal numbered format with icons (🗓, ✍️, 📌), numbered articles (1, 2, 3...), maximum 10 items, and maximum 2 sentences per item. The title MUST be a clickable markdown link - do NOT show the URL on a separate line.
 7. **URL Transformation**: ALWAYS transform URLs before displaying. Never show original source URLs. Use process.env.PRIMARY_DOMAIN_URL + "/articles/" + slug. If slug is missing/null/empty, show "URL không khả dụng"
-8. **Response Format**: When presenting news, ALWAYS use the clean minimal format with: Header (## 📰 Tin tức liên quan đến <SYMBOL or Topic>), numbered articles (1, 2, 3...), icons with labels (🗓 Ngày:, 🔗 URL:, ✍️ Tóm tắt:, 📌 Tác động:), maximum 10 items, maximum 2 sentences per item, no nested bullet points. NEVER repeat field labels "Tiêu đề/Ngày đăng/Tóm tắt/Tác động" - only use icons with their labels.
+8. **Response Format**: When presenting news, ALWAYS use the clean minimal format with: Header (## 📰 Tin tức liên quan đến <SYMBOL or Topic>), numbered articles (1, 2, 3...) with clickable title links [Title](url), icons with labels (🗓 Ngày:, ✍️ Tóm tắt:, 📌 Tác động:), maximum 10 items, maximum 2 sentences per item, no nested bullet points. NEVER repeat field labels "Tiêu đề/Ngày đăng/Tóm tắt/Tác động" - only use icons with their labels. The title MUST be a clickable markdown link - do NOT show the raw URL on a separate line.
 9. **LIMIT 10**: Every SQL query MUST include LIMIT 10 (this is mandatory)
 
 ## TOOL USAGE
