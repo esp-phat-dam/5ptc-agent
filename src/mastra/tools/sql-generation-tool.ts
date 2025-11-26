@@ -3,6 +3,71 @@ import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
 import { generateObject } from 'ai';
 
+// Forbidden columns that must never be selected from the news table
+const FORBIDDEN_COLUMNS = ['content', 'body', 'full_text', 'html', 'raw_content'];
+const ALLOWED_COLUMNS = ['id', 'title', 'slug', 'symbol', 'url', 'published_at'];
+const NEWS_TABLE_NAME = 'news';
+
+// Helper function to check if a SQL query contains forbidden columns
+function containsForbiddenColumns(sql: string): { hasForbidden: boolean; forbiddenColumns: string[] } {
+  const sqlLower = sql.toLowerCase();
+  const foundForbidden: string[] = [];
+
+  // Check for forbidden columns in SELECT clause
+  // Match patterns like: SELECT content, SELECT news.content, SELECT "content", etc.
+  const selectMatch = sqlLower.match(/select\s+([^from]+?)\s+from/i);
+  if (selectMatch) {
+    const selectClause = selectMatch[1];
+    FORBIDDEN_COLUMNS.forEach((col) => {
+      // Check for column name (with word boundaries to avoid partial matches)
+      const regex = new RegExp(`\\b${col}\\b`, 'i');
+      if (regex.test(selectClause)) {
+        foundForbidden.push(col);
+      }
+    });
+  }
+
+  return {
+    hasForbidden: foundForbidden.length > 0,
+    forbiddenColumns: foundForbidden,
+  };
+}
+
+// Helper function to sanitize SQL by removing forbidden columns from SELECT clause
+function sanitizeSQL(sql: string): string {
+  const sqlLower = sql.toLowerCase();
+  const selectMatch = sql.match(/select\s+([^from]+?)\s+from/i);
+  
+  if (!selectMatch) {
+    return sql; // Return as-is if we can't parse it
+  }
+
+  const originalSelect = selectMatch[1];
+  const selectClause = originalSelect;
+  
+  // Split by comma and filter out forbidden columns
+  const columns = selectClause.split(',').map((col) => col.trim());
+  const sanitizedColumns = columns.filter((col) => {
+    const colLower = col.toLowerCase();
+    // Remove table qualifiers and quotes for comparison
+    const colName = colLower
+      .replace(/^[\w.]+\./, '') // Remove table prefix
+      .replace(/^["']|["']$/g, '') // Remove quotes
+      .trim();
+    
+    return !FORBIDDEN_COLUMNS.includes(colName);
+  });
+
+  if (sanitizedColumns.length === 0) {
+    // If all columns were removed, add allowed columns as fallback
+    sanitizedColumns.push(...ALLOWED_COLUMNS);
+  }
+
+  // Reconstruct the SQL with sanitized columns
+  const sanitizedSelect = sanitizedColumns.join(', ');
+  return sql.replace(/select\s+[^from]+?\s+from/i, `SELECT ${sanitizedSelect} FROM`);
+}
+
 // Define the schema for SQL generation output
 const sqlGenerationSchema = z.object({
   sql: z.string().describe('The generated SQL query'),
@@ -79,6 +144,43 @@ export const sqlGenerationTool = createTool({
 DATABASE SCHEMA:
 ${schemaDescription}
 
+CRITICAL RULE - CONTENT COLUMN RESTRICTION:
+⚠️ NEVER SELECT THE "content" COLUMN OR RELATED TEXT COLUMNS FROM THE "news" TABLE ⚠️
+
+When querying the "news" table (or any table named "news"), you MUST NOT select or reference these forbidden columns:
+- content
+- body
+- full_text
+- html
+- raw_content
+- (or any column that contains long article text)
+
+You are ONLY allowed to query these columns from the "news" table (in this order):
+- id
+- title
+- slug
+- symbol
+- url
+- published_at
+
+If a user asks for article details or summaries, you must NOT fetch the "content" column. Instead, rely on:
+- title
+- slug
+- summary (if exists)
+- metadata
+- or simply indicate that detailed content is not available in the database
+
+ALWAYS generate SQL in this pattern for the "news" table:
+SELECT id, title, slug, symbol, url, published_at
+FROM news
+WHERE <conditions>
+ORDER BY published_at DESC
+LIMIT 10;
+
+CRITICAL: Every query for the "news" table MUST include LIMIT 10. This is mandatory.
+
+Never include "content" in SELECT, WHERE, or any query part when working with the "news" table.
+
 RULES:
 1. Only generate SELECT queries for data retrieval
 2. Use proper PostgreSQL syntax
@@ -88,7 +190,7 @@ RULES:
 6. Use proper data types for comparisons
 7. Format queries with proper indentation and line breaks
 8. Include appropriate WHERE clauses to filter results
-9. Use LIMIT when appropriate to prevent overly large result sets
+9. CRITICAL: For "news" table queries, ALWAYS include LIMIT 10 (this is mandatory)
 10. Consider performance implications of the query
 
 QUERY ANALYSIS:
@@ -98,6 +200,7 @@ QUERY ANALYSIS:
 - Consider aggregation functions if needed
 - Think about appropriate filtering conditions
 - Consider ordering and limiting results
+- CRITICAL: If querying "news" table, only use allowed columns (id, title, slug, symbol, url, published_at) and ALWAYS include LIMIT 10
 
 Provide a high-confidence SQL query that accurately answers the user's question.`;
 
@@ -119,6 +222,26 @@ Please provide:
         schema: sqlGenerationSchema,
         temperature: 0.1, // Low temperature for more deterministic results
       });
+
+      // Validate and sanitize the generated SQL
+      const generatedSQL = result.object.sql;
+      const validation = containsForbiddenColumns(generatedSQL);
+      
+      if (validation.hasForbidden) {
+        console.warn(`⚠️ Generated SQL contains forbidden columns: ${validation.forbiddenColumns.join(', ')}. Sanitizing...`);
+        const sanitizedSQL = sanitizeSQL(generatedSQL);
+        
+        // Update the result with sanitized SQL
+        return {
+          ...result.object,
+          sql: sanitizedSQL,
+          explanation: `${result.object.explanation} [Note: Forbidden columns (${validation.forbiddenColumns.join(', ')}) were automatically removed from the query.]`,
+          assumptions: [
+            ...result.object.assumptions,
+            `Forbidden columns (${validation.forbiddenColumns.join(', ')}) were detected and removed from the SELECT clause.`,
+          ],
+        };
+      }
 
       return result.object;
     } catch (error) {
@@ -148,25 +271,40 @@ function createSchemaDescription(databaseSchema: any): string {
       (rc: any) => rc.schema_name === table.schema_name && rc.table_name === table.table_name,
     );
 
+    const isNewsTable = table.table_name.toLowerCase() === NEWS_TABLE_NAME.toLowerCase();
+    
     description += `\nTable: ${table.schema_name}.${table.table_name}`;
     if (rowCount) {
       description += ` (${rowCount.row_count} rows)`;
     }
+    
+    if (isNewsTable) {
+      description += '\n⚠️ RESTRICTED TABLE - Content column access is forbidden ⚠️';
+      description += '\nAllowed columns only: id, title, slug, symbol, url, published_at';
+      description += '\nForbidden columns: content, body, full_text, html, raw_content (and any long text columns)';
+      description += '\nMANDATORY: Every query MUST include LIMIT 10';
+    }
+    
     description += '\nColumns:\n';
 
     columns.forEach((column: any) => {
-      description += `  - ${column.column_name}: ${column.data_type}`;
-      if (column.character_maximum_length) {
-        description += `(${column.character_maximum_length})`;
-      }
-      if (column.is_primary_key) {
-        description += ' [PRIMARY KEY]';
-      }
-      if (column.is_nullable === 'NO') {
-        description += ' [NOT NULL]';
-      }
-      if (column.column_default) {
-        description += ` [DEFAULT: ${column.column_default}]`;
+      // Skip forbidden columns when describing the news table
+      if (isNewsTable && FORBIDDEN_COLUMNS.includes(column.column_name.toLowerCase())) {
+        description += `  - ${column.column_name}: ${column.data_type} [FORBIDDEN - DO NOT SELECT]`;
+      } else {
+        description += `  - ${column.column_name}: ${column.data_type}`;
+        if (column.character_maximum_length) {
+          description += `(${column.character_maximum_length})`;
+        }
+        if (column.is_primary_key) {
+          description += ' [PRIMARY KEY]';
+        }
+        if (column.is_nullable === 'NO') {
+          description += ' [NOT NULL]';
+        }
+        if (column.column_default) {
+          description += ` [DEFAULT: ${column.column_default}]`;
+        }
       }
       description += '\n';
     });
