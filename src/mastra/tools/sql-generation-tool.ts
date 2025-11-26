@@ -181,13 +181,13 @@ LIMIT 10;
 **Stock-specific query (when filtering by stock symbol):**
 SELECT id, title, slug, symbols, url, published_at
 FROM articles
-WHERE symbols @> ARRAY['STOCK_CODE']::text[]
+WHERE symbols @> '["STOCK_CODE"]'::jsonb
 ORDER BY published_at DESC
 LIMIT 10;
 
 CRITICAL: Every query for the "articles" table MUST include LIMIT 10. This is mandatory.
 
-For stock-specific queries: When the user asks about a specific stock code (e.g., "FPT", "VPB", "VCB"), you MUST use the exact condition: WHERE symbols @> ARRAY['STOCK_CODE']::text[] where STOCK_CODE is replaced with the actual stock code from the user's query.
+For stock-specific queries: When the user asks about a specific stock code (e.g., "FPT", "VPB", "VCB"), you MUST use the exact condition: WHERE symbols @> '["STOCK_CODE"]'::jsonb where STOCK_CODE is replaced with the actual stock code from the user's query. Note: The symbols column is of type JSONB, so you must use JSONB operators, not array operators.
 
 Never include "content" in SELECT, WHERE, or any query part when working with the "articles" table.
 
@@ -201,7 +201,7 @@ RULES:
 7. Format queries with proper indentation and line breaks
 8. Include appropriate WHERE clauses to filter results
 9. CRITICAL: For "articles" table queries, ALWAYS include LIMIT 10 (this is mandatory)
-10. CRITICAL: For stock-specific queries on "articles" table, use WHERE symbols @> ARRAY['STOCK_CODE']::text[] (replace STOCK_CODE with the actual stock code)
+10. CRITICAL: For stock-specific queries on "articles" table, use WHERE symbols @> '["STOCK_CODE"]'::jsonb (replace STOCK_CODE with the actual stock code). The symbols column is JSONB type, so use JSONB operators, not array operators.
 11. Consider performance implications of the query
 
 QUERY ANALYSIS:
@@ -212,7 +212,7 @@ QUERY ANALYSIS:
 - Think about appropriate filtering conditions
 - Consider ordering and limiting results
 - CRITICAL: If querying "articles" table, only use allowed columns (id, title, slug, symbols, url, published_at) and ALWAYS include LIMIT 10
-- CRITICAL: If filtering by stock symbol in "articles" table, use WHERE symbols @> ARRAY['STOCK_CODE']::text[] where STOCK_CODE is the actual stock code from the user's query
+- CRITICAL: If filtering by stock symbol in "articles" table, use WHERE symbols @> '["STOCK_CODE"]'::jsonb where STOCK_CODE is the actual stock code from the user's query. The symbols column is JSONB type, so use JSONB operators, not array operators.
 
 Provide a high-confidence SQL query that accurately answers the user's question.`;
 
